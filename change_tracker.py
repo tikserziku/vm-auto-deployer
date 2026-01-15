@@ -15,7 +15,7 @@ DB_PATH = Path(__file__).parent / "changes.db"
 TRACKED_PROJECTS = {
     "claude-mailbox": "/home/ubuntu/claude-mailbox",
     "agi-news-agent": "/home/ubuntu/agi-news-agent",
-    "mcp-hub": "/home/ubuntu/mcp-hub",
+    "mcp-hub": "/home/ubuntu/mcp-hub-data",
     "auto-deployer": "/home/ubuntu/auto-deployer"
 }
 
