@@ -10,14 +10,17 @@ import hashlib
 import subprocess
 from datetime import datetime
 from pathlib import Path
-
-DB_PATH = Path(__file__).parent / "changes.db"
 TRACKED_PROJECTS = {
+    "ai-learning-agent": "/home/ubuntu/projects/ai-learning-agent",
+    "youtube-ai-monitor": "/home/ubuntu/projects/youtube-ai-monitor",
+    "arm-hunter": "/home/ubuntu/projects/arm-hunter",
     "claude-mailbox": "/home/ubuntu/claude-mailbox",
     "agi-news-agent": "/home/ubuntu/agi-news-agent",
     "mcp-hub": "/home/ubuntu/mcp-hub-data",
     "auto-deployer": "/home/ubuntu/auto-deployer"
 }
+
+DB_PATH = Path(__file__).parent / "changes.db"
 
 # Files to track (patterns)
 TRACK_PATTERNS = ["*.py", "*.js", "*.md", "*.json", "*.sh"]
