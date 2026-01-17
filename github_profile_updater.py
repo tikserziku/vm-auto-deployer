@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""
+GitHub Profile Updater
+Automatically updates GitHub profile README with live statistics.
+
+Features:
+- Shows active services status
+- Displays project statistics
+- Updates contribution info
+- Runs via systemd timer
+"""
+
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Any
+import requests
+
+# Configuration
+HOME = Path.home()
+PROFILE_REPO = 'tikserziku/tikserziku'  # GitHub profile repo
+KNOWLEDGE_FILE = HOME / 'docs' / 'knowledge-base.json'
+INTERNAL_KNOWLEDGE = HOME / 'agent-memory' / 'internal-knowledge.json'
+
+# GitHub token from environment
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
+
+# Services to check
+SERVICES = [
+    'claude-mailbox',
+    'youtube-ai-monitor',
+    'agi-news-agent',
+    'arm-hunter',
+    'mcp-hub',
+    'github-auto-sync'
+]
+
+
+def get_service_status(service_name: str) -> str:
+    """Get systemd service status."""
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', service_name],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.stdout.strip()
+    except:
+        return 'unknown'
+
+
+def load_knowledge() -> Dict[str, Any]:
+    """Load knowledge base."""
+    kb = {'projects': {}}
+
+    if KNOWLEDGE_FILE.exists():
+        try:
+            kb.update(json.loads(KNOWLEDGE_FILE.read_text()))
+        except:
+            pass
+
+    if INTERNAL_KNOWLEDGE.exists():
+        try:
+            internal = json.loads(INTERNAL_KNOWLEDGE.read_text())
+            kb['internal'] = internal
+        except:
+            pass
+
+    return kb
+
+
+def get_github_stats() -> Dict[str, Any]:
+    """Get GitHub contribution stats via API."""
+    stats = {
+        'repos': 0,
+        'commits_today': 0,
+        'streak': 0
+    }
+
+    if not GITHUB_TOKEN:
+        return stats
+
+    try:
+        headers = {
+            'Authorization': f'token {GITHUB_TOKEN}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+
+        # Get user repos
+        response = requests.get(
+            'https://api.github.com/user/repos?per_page=100',
+            headers=headers,
+            timeout=10
+        )
+        if response.status_code == 200:
+            repos = response.json()
+            stats['repos'] = len(repos)
+
+            # Count repos with recent commits
+            today = datetime.now().date().isoformat()
+            for repo in repos:
+                if repo.get('pushed_at', '')[:10] == today:
+                    stats['commits_today'] += 1
+
+    except Exception as e:
+        print(f'Error getting GitHub stats: {e}')
+
+    return stats
+
+
+def generate_profile_readme() -> str:
+    """Generate profile README content."""
+    kb = load_knowledge()
+    gh_stats = get_github_stats()
+
+    # Get service statuses
+    services_info = []
+    running_count = 0
+    for service in SERVICES:
+        status = get_service_status(service)
+        if status == 'active':
+            emoji = '🟢'
+            running_count += 1
+        elif status in ['inactive', 'failed']:
+            emoji = '🔴'
+        else:
+            emoji = '⚪'
+        services_info.append(f'{emoji} {service}')
+
+    # Get project stats from knowledge base
+    projects = kb.get('projects', {})
+    total_projects = len(projects)
+
+    internal = kb.get('internal', {})
+    total_functions = sum(
+        len(p.get('functions', []))
+        for p in internal.get('projects', {}).values()
+    )
+
+    # Build README
+    now = datetime.now().strftime('%Y-%m-%d %H:%M UTC')
+
+    readme = f"""# Hi, I'm Sergei 👋
+
+## 🤖 Autonomous AI Systems
+
+I run a fleet of autonomous AI agents on Oracle Cloud:
+
+### Active Services ({running_count}/{len(SERVICES)})
+{chr(10).join(services_info)}
+
+### System Statistics
+| Metric | Value |
+|--------|-------|
+| 📁 Projects | {total_projects} |
+| ⚙️ Functions | {total_functions} |
+| 🔄 GitHub Repos | {gh_stats['repos']} |
+| 📊 Active Today | {gh_stats['commits_today']} repos |
+
+## 🛠️ Technologies
+
+- **Languages:** Python, JavaScript, TypeScript
+- **AI/ML:** Google Gemini, Claude, OpenAI
+- **Cloud:** Oracle Cloud, AWS
+- **DevOps:** GitHub Actions, Systemd, MCP
+
+## 📚 Main Projects
+
+| Project | Description |
+|---------|-------------|
+| [mcp-hub](https://github.com/tikserziku/mcp-hub) | Model Context Protocol server |
+| [ai-learning-agent](https://github.com/tikserziku/ai-learning-agent) | Self-learning AI system |
+| [youtube-ai-monitor](https://github.com/tikserziku/youtube-ai-monitor) | AI video analyzer |
+| [claude-mailbox](https://github.com/tikserziku/claude-mailbox) | Claude AI integration |
+
+## 📈 Contribution Activity
+
+This profile is automatically updated by my AI agents.
+Check out my contribution graph for daily activity!
+
+---
+
+<sub>🕐 Last updated: {now} | 🤖 Auto-generated by [github-profile-updater](https://github.com/tikserziku/vm-auto-deployer)</sub>
+"""
+
+    return readme
+
+
+def update_github_profile():
+    """Update GitHub profile README."""
+    if not GITHUB_TOKEN:
+        print('GITHUB_TOKEN not set, cannot update profile')
+        return False
+
+    readme_content = generate_profile_readme()
+
+    # Get current file SHA
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+    try:
+        # Get current README
+        response = requests.get(
+            f'https://api.github.com/repos/{PROFILE_REPO}/contents/README.md',
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            current = response.json()
+            sha = current.get('sha', '')
+        else:
+            sha = ''
+
+        # Update README
+        import base64
+        content_b64 = base64.b64encode(readme_content.encode()).decode()
+
+        data = {
+            'message': f'Auto-update profile: {datetime.now().strftime("%Y-%m-%d %H:%M")}',
+            'content': content_b64,
+            'committer': {
+                'name': 'AI Profile Updater',
+                'email': 'ai@example.com'
+            }
+        }
+
+        if sha:
+            data['sha'] = sha
+
+        response = requests.put(
+            f'https://api.github.com/repos/{PROFILE_REPO}/contents/README.md',
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+
+        if response.status_code in [200, 201]:
+            print('GitHub profile updated successfully!')
+            return True
+        else:
+            print(f'Failed to update profile: {response.status_code}')
+            print(response.text)
+            return False
+
+    except Exception as e:
+        print(f'Error updating profile: {e}')
+        return False
+
+
+def main():
+    print('=' * 50)
+    print('GitHub Profile Updater')
+    print('=' * 50)
+    print()
+
+    # Generate and preview
+    print('Generating profile README...')
+    readme = generate_profile_readme()
+    print()
+    print('Preview:')
+    print('-' * 50)
+    print(readme[:500] + '...')
+    print('-' * 50)
+
+    # Update GitHub
+    print()
+    print('Updating GitHub profile...')
+    success = update_github_profile()
+
+    if success:
+        print('Done!')
+    else:
+        print('Update failed - check configuration')
+
+
+if __name__ == '__main__':
+    main()
